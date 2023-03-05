@@ -15,10 +15,15 @@ html(lang="en")
                 form
                     input(placeholder = "room name", required, type="text")
                     button Enter Room
+                form#name
+                    input(placeholder = "message", required, type="text")
+                    button send
+                h4 Open Rooms: 
+                ul
             div#room
                 h3
                 ul
-                form
+                form#msg
                     input(placeholder = "message", required, type="text")
                     button send
         script(src="/socket.io/socket.io.js")
