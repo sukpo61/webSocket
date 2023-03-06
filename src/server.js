@@ -17,13 +17,14 @@ app.use(express.json());
 
 app.use(express.urlencoded({ extended: true }));
 
-app.get("/", (_, res) => res.render("home"));
+// app.get("/", (_, res) => res.render("home"));
 // 주소가 "/" 일떄 기본디렉토리 + 인자 값을 랜더함 /src/public/views/home 을 랜더하는거지
 app.get("/*", (_, res) => res.redirect("/"));
 
 const handlelisten = () => console.log(`Listening on http://localhost:4500`);
 
 const httpServer = http.createServer(app);
+// const httpServer = app.listen(process.env.PORT);
 
 const io = new Server(httpServer);
 
@@ -45,9 +46,10 @@ function publicRooms() {
   return rooms;
 }
 
+const Allrooms = io.sockets.adapter.rooms;
+
 function getChannelRooms(channelId) {
   const channelrooms = [];
-  const Allrooms = io.sockets.adapter.rooms;
 
   function getUserInfo(value) {
     const userinfo = [];
@@ -62,9 +64,12 @@ function getChannelRooms(channelId) {
     return userinfo;
   }
   Allrooms.forEach((value, key) => {
-    if (key.split("/")[0] === channelId && key.split("/")[1]) {
+    if (
+      key.toString().split("/")[0] === channelId &&
+      key.toString().split("/")[1]
+    ) {
       channelrooms.push({
-        name: key.split("/")[1],
+        name: key.toString().split("/")[1],
         userinfo: getUserInfo(value),
         usercount: roomsData.get(key).usercount,
         password: roomsData.get(key).password,
@@ -76,7 +81,6 @@ function getChannelRooms(channelId) {
 
 function getChannelsockets(channelId) {
   const channelusers = [];
-  const Allrooms = io.sockets.adapter.rooms;
 
   function getuserSockets(value) {
     const channel = [];
@@ -90,7 +94,7 @@ function getChannelsockets(channelId) {
   }
 
   Allrooms.forEach((room, key) => {
-    if (key.split("/")[0] === channelId) {
+    if (key.toString().split("/")[0] === channelId) {
       room.forEach((value) => {
         channelusers.push(value);
       });
@@ -99,38 +103,29 @@ function getChannelsockets(channelId) {
   return getuserSockets(channelusers);
 }
 
-// function getFriendChannel(userid) {
-//   let roomname = null;
-//   const usersocket = Array.from(io.sockets.sockets.values()).find(
-//     (s) => s.nickname === userid
-//   );
-//   // if (usersocket.adapter)
-//   if (usersocket) {
-//     // console.log(usersocket.adapter);
-//     publicRooms()?.forEach((room, roomId) => {
-//       room.forEach((value) => {
-//         // console.log(roomId.toString());
-//         if (usersocket?.id === value && roomId.toString()?.split("/")[1]) {
-//           roomname = roomId;
-//         }
-//       });
-//     });
-//   }
-//   return roomname;
-// }
-
-// room.forEach((value) => {
-//   if (usersocket?.id === value && roomId.split("/")[1]) {
-//     roomname = roomId;
-//   }
-// });
+function getFriendChannel(userid) {
+  let roomname = null;
+  const usersocket = Array.from(io.sockets.sockets.values()).find(
+    (s) => s.nickname === userid
+  );
+  if (usersocket) {
+    Allrooms?.forEach((room, roomId) => {
+      room.forEach((value) => {
+        if (usersocket?.id === value && roomId.toString()?.split("/")[1]) {
+          roomname = roomId;
+        }
+      });
+    });
+  }
+  return roomname;
+}
 
 function getAllChannelInfo() {
   let channelsinfo = [];
 
-  publicRooms().forEach((room, roomId) => {
-    let roomchannelid = roomId.split("/")[0];
-    if (roomId.split("/")[1]) {
+  Allrooms.forEach((room, roomId) => {
+    let roomchannelid = roomId.toString().split("/")[0];
+    if (roomId.toString().split("/")[1]) {
       if (
         channelsinfo.map((e) => e.channelid).includes(roomchannelid) &&
         channelsinfo !== []
@@ -205,35 +200,8 @@ io.on("connection", (socket) => {
     socket.emit("requestrooms", getChannelRooms(channelId));
   });
 
-  // 범인
   socket.on("friendchannel", (userid) => {
-    console.log("이게 왜 눌려");
-    socket.emit(
-      "friendchannel",
-      (userid) => {
-        let roomname = null;
-        const usersocket = Array.from(io.sockets.sockets.values()).find(
-          (s) => s.nickname === userid
-        );
-        // if (usersocket.adapter)
-        if (usersocket) {
-          // console.log(usersocket.adapter);
-          publicRooms()?.forEach((room, roomId) => {
-            room.forEach((value) => {
-              // console.log(roomId.toString());
-              if (
-                usersocket?.id === value &&
-                roomId.toString()?.split("/")[1]
-              ) {
-                roomname = roomId;
-              }
-            });
-          });
-        }
-        return roomname;
-      },
-      userid
-    );
+    socket.emit("friendchannel", getFriendChannel(userid), userid);
   });
 
   socket.on("join_room", (roomdata, targetid) => {
@@ -296,10 +264,7 @@ io.on("connection", (socket) => {
   socket.on("leave", (targetid, roomdata) => {
     const roomname = `${roomdata.channelId}/${roomdata.roomtitle}`;
     const room = io.sockets.adapter.rooms.get(roomname);
-    // if (room.size === 1) {
-    //   roomsData.delete(roomname);
-    //   console.log(roomsData);
-    // }
+
     socket.to(roomname).emit("leave", targetid);
     socket.leave(roomname);
     const channelsockets = getChannelsockets(roomdata.channelId);
@@ -313,34 +278,5 @@ io.on("connection", (socket) => {
   });
 });
 
-// const OfferMiddle = async (offer, offerid, answerid) => {
-//   // console.log(numClients);
-//   const usersocket = Array.from(io.sockets.sockets.values()).find(
-//     (s) => s.nickname === answerid
-//   );
-//   if (usersocket) {
-//     console.log(usersocket);
-//     usersocket.emit("offer", offer, offerid, answerid);
-//   } else {
-//     console.log("user is not exist");
-//   }
-// };
-
-// const AnswerMiddle = async (answer, offerid, answerid) => {
-//   const usersocket = Array.from(io.sockets.sockets.values()).find(
-//     (s) => s.nickname === offerid
-//   );
-//   if (usersocket) {
-//     usersocket.emit("answer", answer, answerid);
-//   } else {
-//     console.log("user is not exist");
-//   }
-// };
-
-// const IceMiddle = (ice, targetid) => {
-//   if (ice) {
-//     socket.to(roomName).emit("ice", ice, targetid);
-//   }
-// };
-
 httpServer.listen(4500, handlelisten);
+// console.log("Server is listening on port", process.env.PORT);
