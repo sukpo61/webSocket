@@ -2,6 +2,8 @@ import http from "http";
 import express from "express";
 import path from "path";
 import { Server } from "socket.io";
+
+const cors = require("cors");
 //IO 백설치
 const __dirname = path.resolve();
 
@@ -17,16 +19,29 @@ app.use(express.json());
 
 app.use(express.urlencoded({ extended: true }));
 
+app.use(cors());
+
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", "*");
+  res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE");
+  res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  next();
+});
+
 // app.get("/", (_, res) => res.render("home"));
 // 주소가 "/" 일떄 기본디렉토리 + 인자 값을 랜더함 /src/public/views/home 을 랜더하는거지
 app.get("/*", (_, res) => res.redirect("/"));
 
 const handlelisten = () => console.log(`Listening on http://localhost:4500`);
 
-const httpServer = http.createServer(app);
-// const httpServer = app.listen(process.env.PORT);
+//const httpServer = http.createServer(app);
+const httpServer = app.listen(process.env.PORT);
 
-const io = new Server(httpServer);
+const io = new Server(httpServer, {
+  cors: {
+    origin: "*",
+  },
+});
 
 function countRoom(roomName) {
   return io.sockets.adapter.rooms.get(roomName)?.size;
@@ -69,7 +84,8 @@ function getChannelRooms(channelId) {
       key.toString().split("/")[1]
     ) {
       channelrooms.push({
-        name: key.toString().split("/")[1],
+        roomtitle: key.toString().split("/")[1],
+        channelId: key.toString().split("/")[0],
         userinfo: getUserInfo(value),
         usercount: roomsData.get(key).usercount,
         password: roomsData.get(key).password,
@@ -151,11 +167,19 @@ let roomsData = new Map();
 
 let userSocketId = [];
 
-//public 방을 찾기 위해 개인방이 포함된 방리스트에서d 소캣 아이디를 가진 개인 방을 뺌
+//public 방을 찾기 위해 개인방이 포함된 방리스트에서d 소캣 아이디를 가진 개인 방을 뺌d
 
 io.on("connection", (socket) => {
   socket.on("userid", (userid) => {
     socket["nickname"] = userid;
+    console.log(socket["nickname"]);
+  });
+
+  socket.on("checkusers", (userid) => {
+    console.log(
+      "users",
+      Array.from(io.sockets.sockets.values()).map((e) => e.nickname)
+    );
   });
 
   socket.on("nickName", (myId, id) => {
@@ -190,6 +214,10 @@ io.on("connection", (socket) => {
     socket.to(parseInt(newChat.roomId)).emit("friendNew_message", newChat);
   });
 
+  socket.on("friendMount", (clickId) => {
+    socket.broadcast.emit("friendMount", clickId);
+  });
+
   socket.on("getactivechannels", () => {
     socket.emit("getactivechannels", getAllChannelInfo());
   });
@@ -201,7 +229,12 @@ io.on("connection", (socket) => {
   });
 
   socket.on("friendchannel", (userid) => {
-    socket.emit("friendchannel", getFriendChannel(userid), userid);
+    socket.emit(
+      "friendchannel",
+      getFriendChannel(userid),
+      roomsData.get(getFriendChannel(userid)),
+      userid
+    );
   });
 
   socket.on("join_room", (roomdata, targetid) => {
@@ -232,7 +265,7 @@ io.on("connection", (socket) => {
   });
 
   socket.on("offer", async (offer, offerid, answerid) => {
-    console.log("offerd");
+    console.log(answerid);
     const usersocket = Array.from(io.sockets.sockets.values()).find(
       (s) => s.nickname === answerid
     );
@@ -278,5 +311,5 @@ io.on("connection", (socket) => {
   });
 });
 
-httpServer.listen(4500, handlelisten);
-// console.log("Server is listening on port", process.env.PORT);
+//httpServer.listen(4500, handlelisten);
+console.log("Server is listening on port", process.env.PORT);
